@@ -7887,6 +7887,36 @@ TEST_F(NVFuserTest, FusionCompileIndexType_CUDA) {
             "Compilation with int32 is requested but int64 is required for the arguments")));
   }
 }
+TEST_F(NVFuserTest, FusionComplexScalar_CUDA) {
+  Fusion fusion;
+  FusionGuard fg(&fusion);
+
+  auto tv0 = makeSymbolicTensor(1, DataType::ComplexDouble);
+  fusion.addInput(tv0);
+
+  auto s1 = IrBuilder::create<ComplexDouble>();
+  fusion.addInput(s1);
+
+  auto tv2 = add(tv0, s1);
+
+  fusion.addOutput(tv2);
+
+  auto options =
+      at::TensorOptions().dtype(at::kComplexDouble).device(at::kCUDA, 0);
+  at::manual_seed(0);
+  at::Tensor t0 = at::randn({24}, options);
+  at::Scalar alpha = at::Scalar(std::complex<double>(1.0, 2.0));
+
+  std::vector<c10::IValue> inputs = {t0, alpha};
+
+  FusionExecutor fe;
+  fe.compileFusion(&fusion, inputs);
+  auto cg_outputs = fe.runFusion(inputs);
+
+  auto ref = torch::add(t0, alpha);
+
+  testValidate(&fusion, cg_outputs, inputs, {ref}, __LINE__, __FILE__);
+}
 
 // Test file size should be up to 10K LoC. Create a new file for more tests.
 
