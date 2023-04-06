@@ -334,6 +334,7 @@ if(BUILD_TEST)
     ${NVFUSER_ROOT}/test/test_loop_rotation.cpp
     ${NVFUSER_ROOT}/test/test_gpu_shift.cpp
     ${NVFUSER_ROOT}/test/test_resize.cpp
+    ${NVFUSER_ROOT}/test/test_iterdomains.cpp
     ${NVFUSER_ROOT}/test/test_gpu_tensorcore.cpp
     ${NVFUSER_ROOT}/test/test_gpu_matmul_sass.cpp
     ${NVFUSER_ROOT}/test/test_gpu_view.cpp
