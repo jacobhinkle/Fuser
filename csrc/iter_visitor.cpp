@@ -5,6 +5,7 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 // clang-format on
+#include <instrumentation.h>
 #include <iter_visitor.h>
 
 #include <fusion.h>
@@ -788,6 +789,7 @@ std::deque<std::deque<Val*>> DependencyCheck::getAllUseChains(Val* producer) {
 std::vector<Val*> DependencyCheck::getAllValsBetween(
     const std::unordered_set<Val*>& dependencies,
     const std::vector<Val*>& of) {
+  FUSER_PERF_SCOPE("DependencyCheck::getAllValsBetween");
   return Dependencies::getAllVals(dependencies, of);
 }
 

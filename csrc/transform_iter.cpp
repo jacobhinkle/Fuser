@@ -5,6 +5,7 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 // clang-format on
+#include <instrumentation.h>
 #include <transform_iter.h>
 
 #include <c10/util/irange.h>
@@ -997,6 +998,7 @@ BestEffortReplay BestEffortReplay::replayPasC(
     bool skip_producer_swizzle,
     bool skip_consumer_swizzle,
     bool skip_resize) {
+  FUSER_PERF_SCOPE("BestEffortReplay::replayPasC");
   if (consumer_compute_at_axis < 0)
     consumer_compute_at_axis += (int)consumer->nDims() + 1;
   TORCH_INTERNAL_ASSERT(

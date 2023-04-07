@@ -734,6 +734,7 @@ bool HaloInfo::needsShiftPredicate(Expr* expr) const {
 
 std::unordered_map<IterDomain*, Val*> HaloInfo::buildConcreteHaloExtentMap(
     const LoopIndexing& loop_indexing) const {
+  FUSER_PERF_SCOPE("HaloInfo::buildConcreteHaloExtentMap");
   // Use a local workspace to avoid re-defining halo info.
   HaloInfo local_halo_info = *GpuLower::current()->haloInfo();
 
@@ -741,6 +742,7 @@ std::unordered_map<IterDomain*, Val*> HaloInfo::buildConcreteHaloExtentMap(
 
   // Setup root:
   for (auto consumer_root_id : loop_indexing.consumerTv()->getRootDomain()) {
+    FUSER_PERF_SCOPE("consumer_root_id in loop_indexing.consumerTv()->getRootDomain()");
     auto consumer_index_concrete_id =
         GpuLower::current()->caMap()->getConcreteMappedID(
             consumer_root_id, IdMappingMode::EXACT);
@@ -753,6 +755,7 @@ std::unordered_map<IterDomain*, Val*> HaloInfo::buildConcreteHaloExtentMap(
   std::unordered_set<IterDomain*> merged_shifted_ids;
 
   for (auto expr : loop_indexing.getForwardExprList()) {
+    FUSER_PERF_SCOPE("expr in loop_indexing.getForwardExprList()");
     if (auto split = dynamic_cast<Split*>(expr)) {
       // Merge-then-split of halo-extended IDs is not allowed
       TORCH_INTERNAL_ASSERT(
@@ -852,6 +855,7 @@ std::unordered_map<IterDomain*, Val*> HaloInfo::buildConcreteHaloExtentMap(
             0);
       }
     }
+    FUSER_PERF_SCOPE("After expr loop");
   }
 
   return local_halo_info.extent_map_;

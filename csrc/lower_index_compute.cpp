@@ -14,6 +14,7 @@
 #include <lower_utils.h>
 #include <lower_validation.h>
 #include <transform_iter.h>
+#include <instrumentation.h>
 
 namespace nvfuser {
 
@@ -36,6 +37,7 @@ namespace {
 std::unordered_map<IterDomain*, IterDomain*> mapAllProducerDomainsToConsumer(
     const TensorView* producer_tv,
     const TensorView* consumer_tv) {
+  FUSER_PERF_SCOPE("mapAllProducerDomainsToConsumer");
   // This map has forwarded broadcast axes, it should only be used to compute
   // the allocation position of the producer
   std::unordered_map<IterDomain*, IterDomain*> p2c_alloc_map;
@@ -181,6 +183,7 @@ IndexingParameters getNonGlobalInitialIndexParameters(
     bool index_producer = false,
     const TensorView* producer_tv = nullptr,
     std::unordered_map<IterDomain*, IterDomain*> p2c_map = {}) {
+  FUSER_PERF_SCOPE("getNonGlobalInitialIndexParameters");
   IndexingParameters index_parameters;
   const auto& loops = loop_indexing.loops();
   const auto& loop_domains = loop_indexing.loopDomains();
@@ -501,6 +504,7 @@ LoopIndexingAnalysis::LoopIndexingAnalysis(
     const std::vector<kir::ForLoop*>& loops,
     const TensorView* consumer_tv)
     : consumer_tv_(consumer_tv) {
+  FUSER_PERF_SCOPE("LoopIndexingAnalysis::LoopIndexingAnalysis(loops, consumer_tv)");
   // Validate consistency in given loop nest
   validateLoopStructure(loops);
 
@@ -518,6 +522,7 @@ LoopIndexingAnalysis::LoopIndexingAnalysis(
     const std::vector<IterDomain*>& consumer_leaf_ids,
     const TensorView* consumer_tv)
     : consumer_tv_(consumer_tv) {
+  FUSER_PERF_SCOPE("LoopIndexingAnalysis::LoopIndexingAnalysis(consumer_leaf_ids, consumer_tv)");
   // Populate initial loop iter domains.
   std::transform(
       consumer_leaf_ids.begin(),
@@ -799,6 +804,7 @@ IndexFromIdGraph getTensorIndexFromIdGraph(
     const TensorView* producer_tv,
     bool is_global,
     std::unordered_map<IterDomain*, IterDomain*> c2p_map) {
+  FUSER_PERF_SCOPE("getTensorIndexFromIdGraph");
   bool index_producer = producer_tv != nullptr;
   auto target_tv = index_producer ? producer_tv : consumer_tv;
 
@@ -1064,6 +1070,7 @@ class LoopIndexingTraversal {
  public:
   static std::vector<Expr*> forwardTopologicalOrder(
       const std::vector<Expr*>& exprs) {
+  FUSER_PERF_SCOPE("LoopIndexingTraversal::forwardTopologicalOrder");
     LoopIndexingTraversal traversal(exprs, TraversalOrder::ForwardTopological);
     return traversal.getExprList();
   }
@@ -1260,6 +1267,7 @@ std::vector<Expr*> LoopIndexing::getBackwardExprList() const {
 }
 
 std::unordered_set<IterDomain*> LoopIndexing::getAllExactConcreteIdSet() const {
+  FUSER_PERF_SCOPE("LoopIndexing::getAllExactConcreteIdSet");
   std::unordered_set<IterDomain*> all_id_set;
   for (auto expr : index_exprs_) {
     auto out_ids = ir_utils::filterByType<IterDomain>(expr->outputs());
@@ -1319,6 +1327,7 @@ class LoopIndexingPreferredPathCompute : public IterVisitor {
       const LoopIndexing& loop_indexing,
       bool use_replay_map,
       const std::unordered_map<IterDomain*, IterDomain*>& p2c_map) {
+    FUSER_PERF_SCOPE("LoopIndexingPreferredPathCompute::compute");
     LoopIndexingPreferredPathCompute compute;
 
     auto all_concrete_ids = loop_indexing.getAllExactConcreteIdSet();

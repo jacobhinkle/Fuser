@@ -5,6 +5,7 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 // clang-format on
+#include <instrumentation.h>
 #include <ir_iostream.h>
 #include <ir_utils.h>
 #include <iter_visitor.h>
@@ -75,6 +76,7 @@ std::unordered_map<IterDomain*, IterDomain*> PairwiseRootDomainMap::map(
     const TensorDomain* consumer,
     const std::unordered_set<IterDomain*>& root_dims_to_map,
     bool producer_to_consumer) const {
+  FUSER_PERF_SCOPE("PairwiseRootDomainMap::map");
   // Sanity check that the given producer and consumer domains are
   // really the TensorDomains of the producer and consumer TensorViews
   // given to the constructor.

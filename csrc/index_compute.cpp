@@ -80,6 +80,7 @@ Val* getProducerIndexWithHalo(
     Val* producer_index,
     const TensorView* consumer_tv,
     bool is_overriden_index) {
+  FUSER_PERF_SCOPE("getProducerIndexWithHalo");
   const auto offset = is_overriden_index
       ? 0
       : getProducerHaloOffset(producer_tv, producer_axis, consumer_tv);
@@ -216,6 +217,7 @@ Val* getProducerIndexWithGather(
     const TensorView* producer_tv,
     const TensorView* consumer_tv,
     const std::unordered_map<IterDomain*, Val*>& concrete_index_map) {
+  FUSER_PERF_SCOPE("getProducerIndexWithHalo");
   auto gather_op = dynamic_cast<const GatherOp*>(consumer_tv->definition());
 
   // Just return the producer index as is if this is not a gather
@@ -270,6 +272,7 @@ Val* getProducerIndexWithPartialSplit(
     IterDomain* producer_root_id,
     const TensorView* producer_tv,
     const TensorView* consumer_tv) {
+  FUSER_PERF_SCOPE("getProducerIndexWithPartialSplit");
   const auto gpu_lower = GpuLower::current();
 
   auto p2c =
@@ -1249,6 +1252,7 @@ indexMapFromTV(
     kir::ForLoop* alloc_loop,
     bool as_consumer,
     kir::ForLoop* double_buffer_loop) {
+  FUSER_PERF_SCOPE("indexMapFromTV");
   bool within_alloc = false;
   if (alloc_loop == nullptr) {
     within_alloc = true;
@@ -1484,6 +1488,7 @@ namespace {
 std::unordered_map<IterDomain*, IterDomain*> mapAllProducerDomainsToConsumer(
     TensorView* producer_tv,
     const TensorView* consumer_tv) {
+  FUSER_PERF_SCOPE("mapAllProducerDomainsToConsumer");
   // This map has forwarded broadcast axes, it should only be used to compute
   // the allocation position of the producer
   std::unordered_map<IterDomain*, IterDomain*> p2c_alloc_map;
@@ -1530,6 +1535,7 @@ std::vector<Val*> Index::getNonGlobalProducerStridedIndices(
     const std::vector<kir::ForLoop*>& loops,
     const std::unordered_set<kir::ForLoop*>& rotated_loops,
     const std::unordered_map<IterDomain*, Val*>& override_index) {
+  FUSER_PERF_SCOPE("GpuLower::Lower::Index::getNonGlobalProducerStridedIndices");
   const auto gpu_lower = GpuLower::current();
   // Replay producer to look like consumer so we can index on producer since our
   // loop nests look like consumer

@@ -642,6 +642,7 @@ void fillProducerVectorizedContigRootDomains(
     const TensorView* consumer_tv,
     const std::unordered_map<IterDomain*, IterDomain*>& c2p_map,
     const ContigIDs& contig_finder) {
+  FUSER_PERF_SCOPE("fillProducerVectorizedContigRootDomains");
   auto& info_vector = GpuLower::current()->vectorizedSetInfo();
   auto it = std::find_if(
       info_vector.begin(),

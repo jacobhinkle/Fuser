@@ -980,6 +980,7 @@ class ReusableAllocationFinder : private kir::IrVisitor {
       bool inner_aliasing_pass)
       : allocation_info_map_(allocation_info_map),
         inner_aliasing_pass_(inner_aliasing_pass) {
+    FUSER_PERF_SCOPE("ReusableAllocationFinder");
     if (inner_aliasing_pass_) {
       allocation_info_map_.prepareInnerSharingAnalysis();
     } else {

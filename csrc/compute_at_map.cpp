@@ -8,6 +8,7 @@
 #include <compute_at_map.h>
 
 #include <disjoint_set.h>
+#include <instrumentation.h>
 #include <ir_utils.h>
 #include <lower2device.h>
 #include <root_domain_map.h>
@@ -1331,6 +1332,7 @@ void ComputeAtMap::buildUniqueExactExprMaps() {
 IterDomain* ComputeAtMap::getConcreteMappedID(
     IterDomain* id,
     IdMappingMode mode) const {
+  FUSER_PERF_SCOPE("ComputeAtMap::getConcreteMappedID");
   auto disjoint_set_shared_ptr = disjointSetOf(id, mode);
 
   TORCH_INTERNAL_ASSERT(
