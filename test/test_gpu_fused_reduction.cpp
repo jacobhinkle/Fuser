@@ -51,6 +51,69 @@ using namespace at::indexing;
 
 namespace {
 
+// Note that this does not check Grouped reductions or Welford ops
+void validateReductionsAreAllreduce(kir::Kernel* kernel) {
+  for (auto expr : KernelExprVisitor::getAllExprs(kernel)) {
+    if (expr == nullptr || !expr->isA<ReductionOp>()) {
+      continue;
+    }
+    ReductionOp* r = expr->as<ReductionOp>();
+
+    TORCH_CHECK(
+        r->isAllreduce(), "Found non-allreduce reduction ", r->toString());
+  }
+}
+
+// This was copied from FuseBroadcastWithWarpReduce
+// Checks if the given IterDomain is mapped to a single warp,
+//  i.e. they are known at compile time to be of constant
+//   size of warp_size and they are paralleled on TIDx
+// TODO: refactor this to lower_utils?
+bool isSingleWarp(IterDomain* id) {
+  int warp_size = at::cuda::warp_size();
+  if (id->getParallelType() != ParallelType::TIDx) {
+    return false;
+  }
+
+  if (!GpuLower::current()->getWarpPaddedParallelInfo().is_tidx_single_warp) {
+    return false;
+  }
+
+  // Prioritize checking for padded dimension
+  if (id->getMaybeSizeAfterPadding().has_value()) {
+    return id->getMaybeSizeAfterPadding().value() == warp_size;
+  }
+
+  if (id->extent()->isConstScalar()) {
+    return id->extent()->evaluateInt() == warp_size;
+  }
+
+  return false;
+}
+
+// Note that this does not check Grouped reductions or Welford ops
+void validateReductionsAreSingleWarp(kir::Kernel* kernel) {
+  for (auto expr : KernelExprVisitor::getAllExprs(kernel)) {
+    if (expr == nullptr || !expr->isA<ReductionOp>()) {
+      continue;
+    }
+    ReductionOp* r = expr->as<ReductionOp>();
+
+    // Check that all reduction leaf IterDomains are single-warp size
+    for (auto id : r->out()->as<TensorView>()->domain()->domain()) {
+      if (id->isReduction()) {
+        TORCH_CHECK(
+            isSingleWarp(id),
+            "Found non-allreduce reduction ",
+            " in output ",
+            r->out()->toString(),
+            " of reduction expression ",
+            r->toString());
+      }
+    }
+  }
+}
+
 void validateNoParallelBroadcastExist(kir::Kernel* kernel) {
   for (auto expr : KernelExprVisitor::getAllExprs(kernel)) {
     BroadcastOp* bc = dynamic_cast<BroadcastOp*>(expr);
@@ -2525,6 +2588,117 @@ TEST_F(NVFuserTest, FusionGeluBwdReduction_CUDA) {
       __FILE__,
       "",
       reduction_params->lparams);
+}
+
+// Test that a single-warp reduction+broadcast is fused to an allreduce
+TEST_F(NVFuserTest, FusionWarpAllreduce_CUDA) {
+  const int nx = 16;
+  const int tidx = 128;
+  const int bidx = 1;
+
+  if (ceilDiv(nx, tidx) > deviceSMCount()) {
+    GTEST_SKIP() << "Not enough SMs to run this test";
+  }
+
+  Fusion fusion;
+  FusionGuard fg(&fusion);
+
+  auto tv0 = makeSymbolicTensor(1);
+  fusion.addInput(tv0);
+
+  auto tv1 = sum(tv0, {0});
+  auto tv2 = broadcast(tv1, {true});
+  auto tv3 = add(tv0, tv2);
+
+  fusion.addOutput(tv3);
+
+  tv3->split(0, tidx);
+  tv3->split(0, bidx);
+  tv3->split(0, 1); // unswitch
+  TransformPropagator propagator(tv3);
+  MaxRootDomainInfoSpanningTree(tv3).traverse(&propagator);
+
+  tv3->axis(0)->parallelize(ParallelType::BIDy);
+  tv3->axis(2)->parallelize(ParallelType::BIDx);
+  tv3->axis(3)->parallelize(ParallelType::TIDx);
+  scheduler_utils::parallelizeAllLike(tv3);
+
+  // Just to make sure fused_reduction and work buffers are allocated
+  // uniquely
+  tv1->axis(1)->parallelize(ParallelType::Unswitch);
+
+  GpuLower gpulw(&fusion);
+  validateNoParallelBroadcastExist(gpulw.kernel());
+
+  /*
+  auto options = at::TensorOptions().dtype(at::kFloat).device(at::kCUDA, 0);
+  at::manual_seed(0);
+  auto t0 = at::randn({nx}, options);
+
+  FusionExecutor fe;
+  fe.compileFusion(&fusion, {t0});
+  auto cg_outputs = fe.runFusion({t0});
+
+  auto ref = sum(t0).unsqueeze(0) + t0;
+
+  testValidate(&fusion, cg_outputs, {t0}, {ref}, __LINE__, __FILE__);
+  */
+}
+
+// Test gathering for lookup as is done in the cross_entropy pattern
+// See https://github.com/NVIDIA/Fuser/issues/151
+TEST_F(NVFuserTest, FusionWarpAllreduceCrossEntropy_CUDA) {
+  const int batch_size = 16384;
+  const int num_classes = 60;
+  const int tidx = 128;
+  const int bidx = 1;
+
+  Fusion fusion;
+  FusionGuard fg(&fusion);
+
+  auto log_probs = makeSymbolicTensor(2);
+  auto labels = makeSymbolicTensor(1, DataType::Int);
+  fusion.addInput(log_probs);
+  fusion.addInput(labels);
+
+  auto tv2 = broadcast(labels, {false, true});
+  auto tv3 = torch_gather(log_probs, 1, tv2);
+  auto tv4 = squeeze(tv3, std::vector<bool>({false, true}));
+
+  fusion.addOutput(tv4);
+
+  tv4->split(0, tidx);
+  tv4->split(0, bidx);
+  tv4->split(0, 1); // unswitch
+  TransformPropagator propagator(tv4);
+  MaxRootDomainInfoSpanningTree(tv4).traverse(&propagator);
+
+  tv4->axis(0)->parallelize(ParallelType::BIDy);
+  tv4->axis(2)->parallelize(ParallelType::BIDx);
+  tv4->axis(3)->parallelize(ParallelType::TIDx);
+  scheduler_utils::parallelizeAllLike(tv4);
+
+  /*
+  auto kernel = GpuLower(&fusion).kernel();
+  validateReductionsAreSingleWarp(kernel);
+  validateReductionsAreAllreduce(kernel);
+  validateNoParallelBroadcastExist(kernel);
+  */
+
+  auto options = at::TensorOptions().dtype(at::kFloat).device(at::kCUDA, 0);
+  at::manual_seed(0);
+  auto at_log_probs = at::randn({batch_size, num_classes}, options);
+  auto at_labels =
+      at::randint(0, num_classes, {batch_size}, options.dtype(at::kLong));
+  std::vector<c10::IValue> inputs = {at_log_probs, at_labels};
+
+  FusionExecutor fe;
+  fe.compileFusion(&fusion, inputs);
+  auto cg_outputs = fe.runFusion(inputs);
+
+  auto ref = at::gather(at_log_probs, 1, at_labels.unsqueeze(1)).squeeze();
+
+  testValidate(&fusion, cg_outputs, inputs, {ref}, __LINE__, __FILE__);
 }
 
 } // namespace nvfuser
