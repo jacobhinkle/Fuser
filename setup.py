@@ -23,6 +23,9 @@
 #   --debug
 #     Building nvfuser in debug mode
 #
+#   --profile
+#     Build nvfuser in C++ profiling mode for use with py-spy, gprof, etc.
+#
 #   -version-tag=TAG
 #     Specify the tag for build nvfuser version, this is used for pip wheel
 #     package nightly where we might want to add a date tag
@@ -74,6 +77,14 @@ for i, arg in enumerate(sys.argv):
         continue
     if arg == "--debug":
         BUILD_TYPE = "Debug"
+        continue
+    if arg == "--profile":
+        # Debug symbols help py-spy get correct function names when merging
+        # with Python stack trace
+        BUILD_TYPE = "RelWithDebInfo"
+        CMAKE_CXX_FLAGS = "-pg"
+        CMAKE_SHARED_LINKER_FLAGS = "-pg"
+        CMAKE_EXE_LINKER_FLAGS = "-pg"
         continue
     if arg.startswith("-install_requires="):
         INSTALL_REQUIRES = arg.split("=")[1].split(",")
@@ -256,6 +267,7 @@ def cmake(build_dir: str = "", install_prefix: str = "./nvfuser"):
         pytorch_cmake_config,
         "-DCMAKE_BUILD_TYPE=" + BUILD_TYPE,
         f"-DCMAKE_INSTALL_PREFIX={install_prefix}",
+        f"-DCMAKE_CXX_FLAGS={CMAKE_CXX_FLAGS}",
         "-B",
         cmake_build_dir,
     ]
@@ -271,7 +283,7 @@ def cmake(build_dir: str = "", install_prefix: str = "./nvfuser"):
         cmd_str.append("-DBUILD_NVFUSER_BENCHMARK=ON")
     cmd_str.append(".")
 
-    print(f"Configuraing CMake with {' '.join(cmd_str)}")
+    print(f"Configuring CMake with {' '.join(cmd_str)}")
     subprocess.check_call(cmd_str)
 
     if not CMAKE_ONLY:
