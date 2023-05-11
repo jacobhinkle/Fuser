@@ -218,10 +218,18 @@ if (PROJECT_IS_TOP_LEVEL)
   install(TARGETS ${NVFUSER_CODEGEN} EXPORT NvfuserTargets DESTINATION lib)
 
   # We are keeping fusion_cache_generated.h for the submodule build because flatc is unavailable.
-  add_custom_target(build_flatbuffer_config
-      COMMAND ./third_party/flatbuffers/flatc -o ../csrc/serde/ -c -b ../csrc/serde/fusion_cache.fbs
-      DEPENDS flatc
-      COMMENT "Generating fusion_cache_generated header from fusion_cache.fbs")
+  add_custom_command(
+    OUTPUT
+      ${NVFUSER_ROOT}/csrc/serde/fusion_cache_generated.h
+    DEPENDS
+      ${NVFUSER_ROOT}/csrc/serde/fusion_cache.fbs
+    DEPENDS flatc
+    COMMAND ./third_party/flatbuffers/flatc -o ../csrc/serde/ -c -b ../csrc/serde/fusion_cache.fbs
+    COMMENT "Generating fusion_cache_generated header from fusion_cache.fbs"
+    VERBATIM
+    )
+  add_custom_target(build_flatbuffer_config ALL
+      DEPENDS ${NVFUSER_ROOT}/csrc/serde/fusion_cache_generated.h)
 
   add_dependencies(${NVFUSER_CODEGEN} flatc build_flatbuffer_config)
 else()
@@ -426,6 +434,8 @@ if(BUILD_NVFUSER_BENCHMARK)
     ${NVFUSER_ROOT}/benchmark/timm.cpp
     ${NVFUSER_ROOT}/benchmark/indexselect.cpp
     ${NVFUSER_ROOT}/benchmark/utils.cpp
+    ${NVFUSER_ROOT}/benchmark/variance.cpp
+    ${NVFUSER_ROOT}/benchmark/welford.cpp
     ${NVFUSER_ROOT}/benchmark/main.cpp
     ${NVFUSER_ROOT}/test/utils.cpp
   )
